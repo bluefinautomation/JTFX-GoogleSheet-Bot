@@ -271,7 +271,7 @@ def stripe_webhook():
             print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
 
             if discord_id:
-                guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+                guild_id = int('1241326139063140363')
                 role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
                 await add_role_to_member(guild_id, int(discord_id), role_id)
 
