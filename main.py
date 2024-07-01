@@ -18,8 +18,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Stripe API keys
-stripe.api_key = config('STRIPE_API_KEY')
-webhook_secret = config('STRIPE_WEBHOOK_KEY')
+stripe.api_key = os.getenv('STRIPE_API_KEY')
+webhook_secret = os.getenv('STRIPE_WEBHOOK_KEY')
 
 # Print statements to debug environment variables
 print("Stripe API Key:", stripe.api_key)
@@ -208,8 +208,8 @@ def stripe_webhook():
 
             if discord_id:
                 # Add role to Discord user
-                guild_id = int(config('DISCORD_GUILD_ID'))
-                role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+                guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+                role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
                 asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
 
                 customer_email = session['customer_email']
@@ -246,8 +246,8 @@ def stripe_webhook():
         print(f"Customer Email: {customer_email}, Amount Paid: {amount_paid}, Discord ID: {discord_id}")
 
         if discord_id:
-            guild_id = int(config('DISCORD_GUILD_ID'))
-            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+            role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
             asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
         else:
             print("No Discord ID found in subscription metadata.")
@@ -264,8 +264,8 @@ def stripe_webhook():
         print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
 
         if discord_id:
-            guild_id = int(config('DISCORD_GUILD_ID'))
-            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+            role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
             asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
 
             customer_name = customer['name'] if 'name' in customer else 'N/A'
@@ -294,8 +294,8 @@ def stripe_webhook():
         print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
 
         if discord_id:
-            guild_id = int(config('DISCORD_GUILD_ID'))
-            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+            role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
             asyncio.run_coroutine_threadsafe(remove_role_from_member(guild_id, int(discord_id), role_id), bot.loop)
 
             discord_username = asyncio.run_coroutine_threadsafe(get_discord_username(int(discord_id)), bot.loop).result()
@@ -315,8 +315,8 @@ def stripe_webhook():
         print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
 
         if discord_id:
-            guild_id = int(config('DISCORD_GUILD_ID'))
-            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            guild_id = int(os.getenv('DISCORD_GUILD_ID'))
+            role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
             asyncio.run_coroutine_threadsafe(remove_role_from_member(guild_id, int(discord_id), role_id), bot.loop)
 
             discord_username = asyncio.run_coroutine_threadsafe(get_discord_username(int(discord_id)), bot.loop).result()
@@ -330,7 +330,7 @@ async def run_flask_app():
     app.run(port=5000)
 
 def run_discord_bot():
-    bot.run(config('DISCORD_TOKEN'))
+    bot.run(os.getenv('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
