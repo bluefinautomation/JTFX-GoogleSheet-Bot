@@ -137,36 +137,42 @@ async def cancel(ctx):
 async def add_role_to_member(guild_id, user_id, role_id):
     print(f"Attempting to add role {role_id} to user {user_id} in guild {guild_id}")
     guild = bot.get_guild(guild_id)
-    role = guild.get_role(role_id)
-    member = guild.get_member(user_id)
     if guild is None:
         print(f"Guild not found for ID: {guild_id}")
+        return
+
+    role = guild.get_role(role_id)
     if role is None:
         print(f"Role not found for ID: {role_id}")
+        return
+
+    member = guild.get_member(user_id)
     if member is None:
         print(f"Member not found for ID: {user_id}")
-    if member and role:
-        await member.add_roles(role)
-        print(f"Added role {role.name} to {member.display_name}")
-    else:
-        print(f"Failed to add role {role_id} to {user_id}")
+        return
+
+    await member.add_roles(role)
+    print(f"Added role {role.name} to {member.display_name}")
 
 async def remove_role_from_member(guild_id, user_id, role_id):
     print(f"Attempting to remove role {role_id} from user {user_id} in guild {guild_id}")
     guild = bot.get_guild(guild_id)
-    role = guild.get_role(role_id)
-    member = guild.get_member(user_id)
     if guild is None:
         print(f"Guild not found for ID: {guild_id}")
+        return
+
+    role = guild.get_role(role_id)
     if role is None:
         print(f"Role not found for ID: {role_id}")
+        return
+
+    member = guild.get_member(user_id)
     if member is None:
         print(f"Member not found for ID: {user_id}")
-    if member and role:
-        await member.remove_roles(role)
-        print(f"Removed role {role.name} from {member.display_name}")
-    else:
-        print(f"Failed to remove role {role_id} from {user_id}")
+        return
+
+    await member.remove_roles(role)
+    print(f"Removed role {role.name} from {member.display_name}")
 
 @bot.event
 async def on_ready():
