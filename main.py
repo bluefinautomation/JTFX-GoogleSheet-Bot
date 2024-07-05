@@ -79,13 +79,12 @@ async def on_message(message):
     if isinstance(message.channel, discord.DMChannel):
         if message.content.lower() == '$subscribe':
             try:
-                print("Creating stripe checkout session")
+
                 # Create a new Stripe Checkout Session
                 checkout_session = stripe.checkout.Session.create(
                     payment_method_types=['card'],
                     line_items=[{
-                        # 'price': 'price_1PXWvCDt39UfBCOTwpKNimKZ',  # Replace with your actual price ID
-                        'price': 'price_1PZFceDt39UfBCOTCcppP8Wa',  # Replace with your actual price ID
+                        'price': 'price_1PXWvCDt39UfBCOTwpKNimKZ',  # Replace with your actual price ID
                         'quantity': 1,
                     }],
                     mode='subscription',
@@ -313,13 +312,19 @@ def stripe_webhook():
 
     return '', 200
 
-def run_flask_app():
-    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+async def run_flask_app():
+    app.run(port=5000)
 
 def run_discord_bot():
     bot.run(config('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
-    flask_thread = Thread(target=run_flask_app)
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    # Run the Flask app in a separate thread
+    flask_thread = Thread(target=lambda: loop.run_until_complete(run_flask_app()))
     flask_thread.start()
+
+    # Run the Discord bot in the main thread
     run_discord_bot()
