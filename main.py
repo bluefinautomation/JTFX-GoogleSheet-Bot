@@ -3,7 +3,7 @@ import stripe
 import gspread
 import discord
 from discord.ext import commands
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, redirect
 from oauth2client.service_account import ServiceAccountCredentials
 import os
 from decouple import config
@@ -18,15 +18,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 # Stripe API keys
-stripe.api_key = os.getenv('STRIPE_API_KEY')
-webhook_secret = os.getenv('STRIPE_WEBHOOK_KEY')
-
-# Print statements to debug environment variables
-print("Stripe API Key:", stripe.api_key)
-print("Webhook Secret:", webhook_secret)
-
-if not stripe.api_key or not webhook_secret:
-    raise ValueError("Environment variables for Stripe API key and webhook secret are not set")
+stripe.api_key = config('STRIPE_API_KEY')
+webhook_secret = config('STRIPE_WEBHOOK_KEY')
 
 # Paths to credentials and token file
 TOKEN_PATH = 'token.pickle'
@@ -81,98 +74,91 @@ intents.message_content = True
 
 bot = commands.Bot(command_prefix='$', intents=intents)
 
-@bot.command(name='subscribe', aliases=['sub'])
-async def subscribe(ctx):
-    print(f"Received subscribe command from {ctx.author.name}")
-    try:
-        # Create a new Stripe Checkout Session
-        checkout_session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price': 'price_1PXj9VKzVLA9Quz4u7OLNf3R',  # Replace with your actual price ID
-                'quantity': 1,
-            }],
-            mode='subscription',
-            success_url='https://discord.com/',  # Replace with your actual success URL
-            cancel_url='https://your-cancel-url.com/cancel',  # Replace with your actual cancel URL
-            client_reference_id=str(ctx.author.id),  # Include the Discord user ID
-            subscription_data={
-                'metadata': {
-                    'discord_id': str(ctx.author.id)
-                }
-            }
-        )
-        # Print session data for debugging
-        print("Checkout Session Data:", json.dumps(checkout_session, indent=2))
-        # Send the checkout link to the user
-        await ctx.message.author.send(f'Click here to subscribe: {checkout_session.url}')
-        print(f"Sent subscription link to {ctx.author.name}")
-    except Exception as e:
-        print(f"Error sending subscription link: {e}")
-
-@bot.command(name='cancel')
-async def cancel(ctx):
-    discord_id = str(ctx.author.id)
-    print(f"Received cancel command from {ctx.author.name}")
-    try:
-        # Find the customer's subscription
-        subscriptions = stripe.Subscription.list(limit=100)
-        for subscription in subscriptions.auto_paging_iter():
-            if subscription.metadata.get('discord_id') == discord_id:
-                stripe.Subscription.delete(subscription.id)
-                await ctx.author.send('Your subscription has been canceled.')
-                print(f"Canceled subscription for {ctx.author.name}")
-                # Update the Google Sheet
-                discord_username = await get_discord_username(discord_id)
-                update_data_in_sheet(discord_username, 'Cancelled')
-                break
-        else:
-            await ctx.author.send('No active subscription found.')
-            print(f"No active subscription found for {ctx.author.name}")
-    except Exception as e:
-        await ctx.author.send(f'Error canceling subscription: {e}')
-        print(f"Error canceling subscription for {ctx.author.name}: {e}")
+@bot.event
+async def on_message(message):
+    if isinstance(message.channel, discord.DMChannel):
+        if message.content.lower() == '$subscribe':
+            try:
+                # Create a new Stripe Checkout Session
+                checkout_session = stripe.checkout.Session.create(
+                    payment_method_types=['card'],
+                    line_items=[{
+                        'price': 'price_1PXWvCDt39UfBCOTwpKNimKZ',  # Replace with your actual price ID
+                        'quantity': 1,
+                    }],
+                    mode='subscription',
+                    success_url='https://discord.com/',  # Replace with your actual success URL
+                    cancel_url='https://your-cancel-url.com/cancel',  # Replace with your actual cancel URL
+                    client_reference_id=str(message.author.id),  # Include the Discord user ID
+                    subscription_data={
+                        'metadata': {
+                            'discord_id': str(message.author.id)
+                        }
+                    }
+                )
+                # Print session data for debugging
+                # print("Checkout Session Data:", json.dumps(checkout_session, indent=2))
+                # Send the checkout link to the user
+                await message.author.send(f'Click here to subscribe: {checkout_session.url}')
+                print(f"Sent subscription link to {message.author.name}")
+            except Exception as e:
+                print(f"Error sending subscription link: {e}")
+        elif message.content.lower() == '$cancel':
+            discord_id = str(message.author.id)
+            print(f"Received cancel command from {message.author.name}")
+            try:
+                # Find the customer's subscription
+                subscriptions = stripe.Subscription.list(limit=100)
+                for subscription in subscriptions.auto_paging_iter():
+                    if subscription.metadata.get('discord_id') == discord_id:
+                        stripe.Subscription.delete(subscription.id)
+                        await message.author.send('Your subscription has been canceled.')
+                        print(f"Canceled subscription for {message.author.name}")
+                        # Update the Google Sheet
+                        discord_username = await get_discord_username(discord_id)
+                        update_data_in_sheet(discord_username, 'Cancelled')
+                        break
+                else:
+                    await message.author.send('No active subscription found.')
+                    print(f"No active subscription found for {message.author.name}")
+            except Exception as e:
+                await message.author.send(f'Error canceling subscription: {e}')
+                print(f"Error canceling subscription for {message.author.name}: {e}")
 
 # Define role management functions
 async def add_role_to_member(guild_id, user_id, role_id):
     print(f"Attempting to add role {role_id} to user {user_id} in guild {guild_id}")
     guild = bot.get_guild(guild_id)
+    role = guild.get_role(role_id)
+    member = guild.get_member(user_id)
     if guild is None:
         print(f"Guild not found for ID: {guild_id}")
-        return
-
-    role = guild.get_role(role_id)
     if role is None:
         print(f"Role not found for ID: {role_id}")
-        return
-
-    member = guild.get_member(user_id)
     if member is None:
         print(f"Member not found for ID: {user_id}")
-        return
-
-    await member.add_roles(role)
-    print(f"Added role {role.name} to {member.display_name}")
+    if member and role:
+        await member.add_roles(role)
+        print(f"Added role {role.name} to {member.display_name}")
+    else:
+        print(f"Failed to add role {role_id} to {user_id}")
 
 async def remove_role_from_member(guild_id, user_id, role_id):
     print(f"Attempting to remove role {role_id} from user {user_id} in guild {guild_id}")
     guild = bot.get_guild(guild_id)
+    role = guild.get_role(role_id)
+    member = guild.get_member(user_id)
     if guild is None:
         print(f"Guild not found for ID: {guild_id}")
-        return
-
-    role = guild.get_role(role_id)
     if role is None:
         print(f"Role not found for ID: {role_id}")
-        return
-
-    member = guild.get_member(user_id)
     if member is None:
         print(f"Member not found for ID: {user_id}")
-        return
-
-    await member.remove_roles(role)
-    print(f"Removed role {role.name} from {member.display_name}")
+    if member and role:
+        await member.remove_roles(role)
+        print(f"Removed role {role.name} from {member.display_name}")
+    else:
+        print(f"Failed to remove role {role_id} from {user_id}")
 
 @bot.event
 async def on_ready():
@@ -191,7 +177,7 @@ def stripe_webhook():
         event = stripe.Webhook.construct_event(
             payload, sig_header, webhook_secret
         )
-        print(f"Webhook event constructed successfully: {json.dumps(event, indent=2)}")
+        # print(f"Webhook event constructed successfully: {json.dumps(event, indent=2)}")
     except ValueError as e:
         print(f"Webhook construct event ValueError: {e}")
         return jsonify({'error': str(e)}), 400
@@ -199,139 +185,129 @@ def stripe_webhook():
         print(f"Webhook construct event SignatureVerificationError: {e}")
         return jsonify({'error': str(e)}), 400
 
-    async def handle_event():
-        if event['type'] == 'checkout.session.completed':
-            session = event['data']['object']
-            print("Checkout Session Completed Event:", json.dumps(session, indent=2))  # Debug print
+    if event['type'] == 'checkout.session.completed':
+        session = event['data']['object']
+        # print("Checkout Session Completed Event:", json.dumps(session, indent=2))  # Debug print
 
-            # Retrieve the subscription to check metadata
-            subscription_id = session.get('subscription')
-            print(f"Subscription ID: {subscription_id}")
-            if subscription_id:
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                print(f"Subscription Data: {json.dumps(subscription, indent=2)}")
-                discord_id = subscription['metadata'].get('discord_id', None)
-                print(f"Discord ID from Subscription Metadata: {discord_id}")
-
-                if discord_id:
-                    # Add role to Discord user
-                    guild_id = int(os.getenv('DISCORD_GUILD_ID'))
-                    role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
-                    await add_role_to_member(guild_id, int(discord_id), role_id)
-
-                    customer_email = session['customer_email']
-                    customer_name = session['customer_name'] if 'customer_name' in session else 'N/A'
-                    next_billing_date = datetime.fromtimestamp(subscription['current_period_end']).strftime('%Y-%m-%d %H:%M:%S')
-
-                    discord_username = await get_discord_username(int(discord_id))
-                    add_data_to_sheet([customer_name, customer_email, discord_username, datetime.now().strftime('%Y-%m-%d %H:%M:%S'), next_billing_date, 'Subscription', 'Active'])
-                else:
-                    print("No Discord ID found in subscription metadata.")
-
-        elif event['type'] == 'invoice.payment_succeeded':
-            invoice = event['data']['object']
-            print("Invoice Payment Succeeded Event:", json.dumps(invoice, indent=2))  # Debug print
-
-            customer_id = invoice['customer']
-            customer = stripe.Customer.retrieve(customer_id)
-            print(f"Customer Data for Payment Succeeded: {json.dumps(customer, indent=2)}")
-            customer_email = customer['email']
-            amount_paid = invoice['amount_paid']
-
-            # Retrieve the subscription to check metadata
-            subscription_id = invoice.get('subscription')
-            print(f"Subscription ID: {subscription_id}")
-            if subscription_id:
-                subscription = stripe.Subscription.retrieve(subscription_id)
-                print(f"Subscription Data: {json.dumps(subscription, indent=2)}")
-                discord_id = subscription['metadata'].get('discord_id', None)
-                print(f"Discord ID from Subscription Metadata: {discord_id}")
-            else:
-                discord_id = None
-                print("No subscription ID found in invoice.")
-
-            print(f"Customer Email: {customer_email}, Amount Paid: {amount_paid}, Discord ID: {discord_id}")
-
-            if discord_id:
-                guild_id = int(os.getenv('DISCORD_GUILD_ID'))
-                role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
-                await add_role_to_member(guild_id, int(discord_id), role_id)
-            else:
-                print("No Discord ID found in subscription metadata.")
-
-        elif event['type'] == 'customer.subscription.created':
-            subscription = event['data']['object']
-            print("Customer Subscription Created Event:", json.dumps(subscription, indent=2))  # Debug print
-
-            customer_id = subscription['customer']
-            customer = stripe.Customer.retrieve(customer_id)
-            print(f"Customer Data for Subscription Created: {json.dumps(customer, indent=2)}")
+        # Retrieve the subscription to check metadata
+        subscription_id = session.get('subscription')
+        print(f"Subscription ID: {subscription_id}")
+        if subscription_id:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            # print(f"Subscription Data: {json.dumps(subscription, indent=2)}")
             discord_id = subscription['metadata'].get('discord_id', None)
-
-            print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
+            print(f"Discord ID from Subscription Metadata: {discord_id}")
 
             if discord_id:
-                guild_id = int('1241326139063140363')
-                role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
-                await add_role_to_member(guild_id, int(discord_id), role_id)
-
-                customer_name = customer['name'] if 'name' in customer else 'N/A'
-                next_billing_date = datetime.fromtimestamp(subscription['current_period_end']).strftime('%Y-%m-%d')
-
-                discord_username = await get_discord_username(int(discord_id))
-
-                cell = sheet.find(discord_username)
-                if cell:
-                    sheet.update_cell(cell.row, 7, 'Active')
-
-                else:
-                    add_data_to_sheet([customer_name, customer['email'], discord_username, datetime.now().strftime('%Y-%m-%d'), next_billing_date, 'Subscription', 'Active'])
+                # Add role to Discord user
+                guild_id = int(config('DISCORD_GUILD_ID'))
+                role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+                asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
             else:
                 print("No Discord ID found in subscription metadata.")
 
-        elif event['type'] == 'customer.subscription.deleted':
-            subscription = event['data']['object']
-            print("Subscription Deleted Event:", json.dumps(subscription, indent=2))  # Debug print
+    elif event['type'] == 'invoice.payment_succeeded':
+        invoice = event['data']['object']
+        # print("Invoice Payment Succeeded Event:", json.dumps(invoice, indent=2))  # Debug print
 
-            customer_id = subscription['customer']
-            customer = stripe.Customer.retrieve(customer_id)
-            print(f"Customer Data for Subscription Deleted: {json.dumps(customer, indent=2)}")
+        customer_id = invoice['customer']
+        customer = stripe.Customer.retrieve(customer_id)
+        # print(f"Customer Data for Payment Succeeded: {json.dumps(customer, indent=2)}")
+        customer_email = customer['email']
+        amount_paid = invoice['amount_paid']
+
+        # Retrieve the subscription to check metadata
+        subscription_id = invoice.get('subscription')
+        print(f"Subscription ID: {subscription_id}")
+        if subscription_id:
+            subscription = stripe.Subscription.retrieve(subscription_id)
+            # print(f"Subscription Data: {json.dumps(subscription, indent=2)}")
             discord_id = subscription['metadata'].get('discord_id', None)
+            print(f"Discord ID from Subscription Metadata: {discord_id}")
+        else:
+            discord_id = None
+            print("No subscription ID found in invoice.")
 
-            print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
+        print(f"Customer Email: {customer_email}, Amount Paid: {amount_paid}, Discord ID: {discord_id}")
 
-            if discord_id:
-                guild_id = int(os.getenv('DISCORD_GUILD_ID'))
-                role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
-                await remove_role_from_member(guild_id, int(discord_id), role_id)
+        if discord_id:
+            guild_id = int(config('DISCORD_GUILD_ID'))
+            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
+        else:
+            print("No Discord ID found in subscription metadata.")
 
-                discord_username = await get_discord_username(int(discord_id))
-                update_data_in_sheet(discord_username, 'Cancelled')
+    elif event['type'] == 'customer.subscription.created':
+        subscription = event['data']['object']
+        # print("Customer Subscription Created Event:", json.dumps(subscription, indent=2))  # Debug print
+
+        customer_id = subscription['customer']
+        customer = stripe.Customer.retrieve(customer_id)
+        # print(f"Customer Data for Subscription Created: {json.dumps(customer, indent=2)}")
+        discord_id = subscription['metadata'].get('discord_id', None)
+
+        print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
+
+        if discord_id:
+            guild_id = int(config('DISCORD_GUILD_ID'))
+            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            asyncio.run_coroutine_threadsafe(add_role_to_member(guild_id, int(discord_id), role_id), bot.loop)
+
+            customer_name = customer['name'] if 'name' in customer else 'N/A'
+            next_billing_date = datetime.fromtimestamp(subscription['current_period_end']).strftime('%Y-%m-%d')
+
+            discord_username = asyncio.run_coroutine_threadsafe(get_discord_username(int(discord_id)), bot.loop).result()
+
+            cell = sheet.find(discord_username)
+            if cell:
+                sheet.update_cell(cell.row, 7, 'Active')
+
             else:
-                print("No Discord ID found in subscription metadata.")
+                add_data_to_sheet([customer_name, customer['email'], discord_username, datetime.now().strftime('%Y-%m-%d'), next_billing_date, 'Subscription', 'Active'])
+        else:
+            print("No Discord ID found in subscription metadata.")
 
-        elif event['type'] == 'invoice.payment_failed':
-            invoice = event['data']['object']
-            print("Invoice Payment Failed Event:", json.dumps(invoice, indent=2))  # Debug print
+    elif event['type'] == 'customer.subscription.deleted':
+        subscription = event['data']['object']
+        # print("Subscription Deleted Event:", json.dumps(subscription, indent=2))  # Debug print
 
-            customer_id = invoice['customer']
-            customer = stripe.Customer.retrieve(customer_id)
-            print(f"Customer Data for Payment Failed: {json.dumps(customer, indent=2)}")
-            discord_id = customer['metadata'].get('discord_id', None)
+        customer_id = subscription['customer']
+        customer = stripe.Customer.retrieve(customer_id)
+        # print(f"Customer Data for Subscription Deleted: {json.dumps(customer, indent=2)}")
+        discord_id = subscription['metadata'].get('discord_id', None)
 
-            print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
+        print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
 
-            if discord_id:
-                guild_id = int(os.getenv('DISCORD_GUILD_ID'))
-                role_id = int(os.getenv('DISCORD_PREMIUM_ROLE_ID'))
-                await remove_role_from_member(guild_id, int(discord_id), role_id)
+        if discord_id:
+            guild_id = int(config('DISCORD_GUILD_ID'))
+            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            asyncio.run_coroutine_threadsafe(remove_role_from_member(guild_id, int(discord_id), role_id), bot.loop)
 
-                discord_username = await get_discord_username(int(discord_id))
-                update_data_in_sheet(discord_username, 'Payment Failed')
-            else:
-                print("No Discord ID found in customer metadata.")
+            discord_username = asyncio.run_coroutine_threadsafe(get_discord_username(int(discord_id)), bot.loop).result()
+            update_data_in_sheet(discord_username, 'Cancelled')
+        else:
+            print("No Discord ID found in subscription metadata.")
 
-    asyncio.run(handle_event())
+    elif event['type'] == 'invoice.payment_failed':
+        invoice = event['data']['object']
+        # print("Invoice Payment Failed Event:", json.dumps(invoice, indent=2))  # Debug print
+
+        customer_id = invoice['customer']
+        customer = stripe.Customer.retrieve(customer_id)
+        # print(f"Customer Data for Payment Failed: {json.dumps(customer, indent=2)}")
+        discord_id = customer['metadata'].get('discord_id', None)
+
+        print(f"Customer Email: {customer['email']}, Discord ID: {discord_id}")
+
+        if discord_id:
+            guild_id = int(config('DISCORD_GUILD_ID'))
+            role_id = int(config('DISCORD_PREMIUM_ROLE_ID'))
+            asyncio.run_coroutine_threadsafe(remove_role_from_member(guild_id, int(discord_id), role_id), bot.loop)
+
+            discord_username = asyncio.run_coroutine_threadsafe(get_discord_username(int(discord_id)), bot.loop).result()
+            update_data_in_sheet(discord_username, 'Payment Failed')
+        else:
+            print("No Discord ID found in customer metadata.")
 
     return '', 200
 
@@ -339,7 +315,7 @@ async def run_flask_app():
     app.run(port=5000)
 
 def run_discord_bot():
-    bot.run(os.getenv('DISCORD_TOKEN'))
+    bot.run(config('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
     loop = asyncio.new_event_loop()
