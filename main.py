@@ -312,11 +312,13 @@ def stripe_webhook():
 
     return '', 200
 
+def run_flask_app():
+    app.run(host='0.0.0.0', port=int(os.environ.get("PORT", 5000)))
+
 def run_discord_bot():
     bot.run(config('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=True, host='0.0.0.0', port=port)
+    flask_thread = Thread(target=run_flask_app)
+    flask_thread.start()
     run_discord_bot()
