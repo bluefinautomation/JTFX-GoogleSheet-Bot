@@ -316,5 +316,7 @@ def run_discord_bot():
     bot.run(config('DISCORD_TOKEN'))
 
 if __name__ == '__main__':
-    # Run the Discord bot in the main thread
+    import os
+    port = int(os.environ.get("PORT", 5000))
+    app.run(debug=True, host='0.0.0.0', port=port)
     run_discord_bot()
