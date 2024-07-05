@@ -84,7 +84,8 @@ async def on_message(message):
                 checkout_session = stripe.checkout.Session.create(
                     payment_method_types=['card'],
                     line_items=[{
-                        'price': 'price_1PXWvCDt39UfBCOTwpKNimKZ',  # Replace with your actual price ID
+                        # 'price': 'price_1PXWvCDt39UfBCOTwpKNimKZ',  # Replace with your actual price ID
+                        'price': 'price_1PZFceDt39UfBCOTCcppP8Wa',  # Replace with your actual price ID
                         'quantity': 1,
                     }],
                     mode='subscription',
